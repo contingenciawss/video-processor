@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Processor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .container { max-width: 700px; width: 100%; background: white; border-radius: 16px; padding: 40px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); }
+        h1 { color: #1e3c72; margin-bottom: 10px; font-size: 2.2em; text-align: center; }
+        .subtitle { text-align: center; color: #666; margin-bottom: 30px; }
+        .upload-area { border: 3px dashed #2a5298; border-radius: 12px; padding: 60px 30px; text-align: center; cursor: pointer; transition: all 0.3s; background: #f8f9fa; }
+        .upload-area:hover { background: #e3f2fd; border-color: #1e3c72; }
+        .upload-icon { font-size: 3.5em; margin-bottom: 15px; }
+        .upload-text { font-size: 1.2em; color: #333; font-weight: 500; margin-bottom: 8px; }
+        .upload-hint { color: #666; font-size: 0.9em; }
+        .file-info { background: #e8f5e9; padding: 15px; border-radius: 10px; margin-top: 20px; display: none; }
+        .file-info.active { display: block; }
+        .processing { display: none; text-align: center; padding: 40px; }
+        .processing.active { display: block; }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #1e3c72; border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .status { color: #1e3c72; font-size: 1.1em; font-weight: 500; margin-bottom: 10px; }
+        .progress-bar { width: 100%; height: 8px; background: #e0e0e0; border-radius: 10px; overflow: hidden; margin: 15px 0; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #1e3c72, #2a5298); width: 0%; transition: width 0.3s; }
+        .result { display: none; text-align: center; padding: 30px; background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); border-radius: 12px; margin-top: 20px; }
+        .result.active { display: block; }
+        .result h3 { color: #155724; margin-bottom: 20px; }
+        .btn { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; border: none; padding: 16px 40px; font-size: 1.1em; font-weight: 600; border-radius: 10px; cursor: pointer; transition: all 0.3s; margin: 10px; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(30, 60, 114, 0.4); }
+        .btn-secondary { background: linear-gradient(135deg, #757575 0%, #616161 100%); }
+        .error { display: none; background: #f8d7da; border: 2px solid #dc3545; padding: 20px; border-radius: 12px; color: #721c24; margin-top: 20px; }
+        .error.active { display: block; }
+        .info { background: #e3f2fd; border-left: 4px solid #1e3c72; padding: 15px; border-radius: 8px; margin-top: 20px; font-size: 0.9em; color: #0d47a1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 Video Processor</h1>
+        <p class="subtitle">Online Media Converter</p>
+
+        <div class="upload-area" id="uploadArea">
+            <input type="file" id="fileInput" accept="audio/*,video/*" hidden>
+            <div class="upload-icon">📁</div>
+            <div class="upload-text">Drop your file here</div>
+            <div class="upload-hint">MP4, AVI, MKV, MP3, WAV (max 500MB)</div>
+        </div>
+
+        <div class="file-info" id="fileInfo">
+            <strong>File:</strong> <span id="fileName"></span><br>
+            <strong>Size:</strong> <span id="fileSize"></span><br>
+            <button class="btn" id="processBtn" style="margin-top:15px;">▶️ Process</button>
+        </div>
+
+        <div class="processing" id="processing">
+            <div class="spinner"></div>
+            <div class="status" id="status">Processing...</div>
+            <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        </div>
+
+        <div class="result" id="result">
+            <h3>✅ Complete!</h3>
+            <button class="btn" id="downloadBtn">💾 Download</button>
+            <button class="btn btn-secondary" onclick="location.reload()">🔄 New</button>
+        </div>
+
+        <div class="error" id="error">
+            <strong>Error:</strong> <span id="errorMsg"></span><br>
+            <button class="btn btn-secondary" onclick="location.reload()" style="margin-top:15px;">Try Again</button>
+        </div>
+
+        <div class="info">Files deleted after 1 hour</div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const processBtn = document.getElementById('processBtn');
+        const processing = document.getElementById('processing');
+        const status = document.getElementById('status');
+        const progressFill = document.getElementById('progressFill');
+        const result = document.getElementById('result');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const error = document.getElementById('error');
+        const errorMsg = document.getElementById('errorMsg');
+
+        let selectedFile = null, downloadUrl = '';
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => e.preventDefault());
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files[0]) handleFile(e.target.files[0]);
+        });
+
+        function handleFile(file) {
+            selectedFile = file;
+            fileName.textContent = file.name;
+            fileSize.textContent = formatBytes(file.size);
+            fileInfo.classList.add('active');
+            uploadArea.style.display = 'none';
+        }
+
+        processBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+            fileInfo.style.display = 'none';
+            processing.classList.add('active');
+            result.classList.remove('active');
+            error.classList.remove('active');
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            try {
+                status.textContent = 'Uploading...';
+                progressFill.style.width = '30%';
+
+                const response = await fetch('/api/process', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                status.textContent = 'Processing...';
+                progressFill.style.width = '60%';
+
+                const data = await response.json();
+
+                if (!response.ok) throw new Error(data.error);
+
+                progressFill.style.width = '100%';
+                downloadUrl = data.downloadUrl;
+                processing.classList.remove('active');
+                result.classList.add('active');
+
+            } catch (err) {
+                processing.classList.remove('active');
+                error.classList.add('active');
+                errorMsg.textContent = err.message;
+            }
+        });
+
+        downloadBtn.addEventListener('click', () => {
+            if (downloadUrl) window.location.href = downloadUrl;
+        });
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024, sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+    </script>
+</body>
+</html>
